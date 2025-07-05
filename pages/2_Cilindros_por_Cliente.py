@@ -55,8 +55,9 @@ if df_detalle is not None and "SERIE" in df_detalle.columns:
 st.title("FASTRACK")
 st.subheader("CONSULTA DE CILINDROS POR CLIENTE")
 
+# Preparar selector de cliente
 if df_proceso is not None:
-    clientes_unicos = df_proceso["CLIENTE"].unique()
+    clientes_unicos = df_proceso["CLIENTE"].dropna().unique()
     cliente_seleccionado = st.selectbox(
         "Seleccione el cliente:", clientes_unicos
     )
@@ -64,66 +65,59 @@ else:
     cliente_seleccionado = None
 
 # ------------------------------------------------------------------
-# Botón de búsqueda
+# Botón de búsqueda y procesamiento
 # ------------------------------------------------------------------
 if st.button("Buscar Cilindros del Cliente"):
     if cliente_seleccionado and df_proceso is not None and df_detalle is not None:
-        # 1) IDs de procesos para el cliente
-        ids_procesos_cliente = df_proceso.loc[
-            df_proceso["CLIENTE"] == cliente_seleccionado, "IDPROC"
-        ]
-
-        # 2) Para esos procesos, obtengo todos los detalles (incluye SERIE y SERVICIO)
-        df_cilindros_cliente = df_detalle.loc[
-            df_detalle["IDPROC"].isin(ids_procesos_cliente),
-            ["IDPROC", "SERIE", "SERVICIO"]
-        ]
-
-        # 3) Filtrar procesos por esos IDs y ordenar
-        df_procesos_filtrados = df_proceso.loc[
-            df_proceso["IDPROC"].isin(df_cilindros_cliente["IDPROC"])
-        ].sort_values(by=["FECHA", "HORA"])
-
-        # 4) Quedarme con el último proceso por IDPROC
-        df_ultimos_procesos = df_procesos_filtrados.drop_duplicates(
-            subset="IDPROC", keep="last"
-        )
-
-        # 5) Mantener solo procesos de DESPACHO o ENTREGA
-        cilindros_en_cliente = df_ultimos_procesos.loc[
-            df_ultimos_procesos["PROCESO"].isin(["DESPACHO", "ENTREGA"])
-        ]
-
-        # 6) Unir con df_cilindros_cliente para traer SERIE y SERVICIO
-        ids_cilindros_en_cliente = df_cilindros_cliente.loc[
-            df_cilindros_cliente["IDPROC"].isin(cilindros_en_cliente["IDPROC"])
-        ].merge(
-            df_ultimos_procesos[["IDPROC", "FECHA"]],
+        # Unir procesos con detalles
+        df_mov = df_detalle.merge(
+            df_proceso[["IDPROC", "FECHA", "HORA", "PROCESO", "CLIENTE", "UBICACION"]],
             on="IDPROC",
-            how="left",
+            how="left"
         )
 
-        # ----------------------------------------------------------
-        # Mostrar resultados y botón de descarga
-        # ----------------------------------------------------------
-        if not ids_cilindros_en_cliente.empty:
-            st.write(f"Cilindros actualmente en el cliente: {cliente_seleccionado}")
+        # Normalizar SERIE y asegurarse que sea string
+        df_mov["SERIE"] = df_mov["SERIE"].astype(str).str.replace(",", "", regex=False)
 
-            # Incluir SERVICIO al mostrar la tabla
+        # Filtrar por cliente
+        df_cliente = df_mov[df_mov["CLIENTE"] == cliente_seleccionado].copy()
+
+        # Convertir FECHA y HORA en datetime para ordenar correctamente
+        df_cliente["FECHA_HORA"] = pd.to_datetime(
+            df_cliente["FECHA"] + " " + df_cliente["HORA"],
+            format="%d/%m/%Y %H:%M",
+            errors="coerce"
+        )
+
+        # Obtener el último movimiento por SERIE
+        df_ultimos = (
+            df_cliente
+            .sort_values(by="FECHA_HORA", ascending=False)
+            .drop_duplicates(subset="SERIE", keep="first")
+        )
+
+        # Filtrar solo los cilindros cuyo último proceso fue DESPACHO o ENTREGA
+        df_entregados = df_ultimos[df_ultimos["PROCESO"].isin(["DESPACHO", "ENTREGA"])]
+
+        # Mostrar resultados
+        if not df_entregados.empty:
+            st.success(f"Cilindros actualmente en el cliente: {cliente_seleccionado}")
+
             st.dataframe(
-                ids_cilindros_en_cliente[["SERIE", "IDPROC", "FECHA", "SERVICIO"]]
+                df_entregados[["SERIE", "IDPROC", "FECHA", "HORA", "PROCESO", "SERVICIO"]]
             )
 
+            # Función auxiliar para descarga
             def convert_to_csv(df: pd.DataFrame) -> bytes:
                 return df.to_csv(index=False).encode("utf-8")
 
             st.download_button(
                 label="⬇️ Descargar resultados en CSV",
-                data=convert_to_csv(ids_cilindros_en_cliente),
+                data=convert_to_csv(df_entregados),
                 file_name=f"cilindros_{cliente_seleccionado}.csv",
                 mime="text/csv",
             )
         else:
-            st.warning("No se encontraron cilindros en el cliente seleccionado.")
+            st.warning("No se encontraron cilindros actualmente en el cliente seleccionado.")
     else:
         st.warning("Por favor, seleccione un cliente.")
