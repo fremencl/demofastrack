@@ -33,7 +33,7 @@ with col2:
 
 # Títulos y subtítulos
 st.write("### SISTEMA TRACKING DE CILINDROS - FASTRACK :chart_with_upwards_trend:")
-st.write("#### URKINOX RANCAGUA")
+st.write("#### OXIMEL")
 
 st.markdown("---")
 
@@ -43,7 +43,7 @@ st.sidebar.success("Selecciona un modelo de consulta")
 # Contenido introductorio y descripción de la aplicación
 st.write("")
 st.markdown(
-    """##### Bienvenido al sistema de gestion de cilindros de URKINOX
+    """##### Bienvenido al sistema de gestion de cilindros de OXIMEL
 
     
 Elije el modelo de consulta que necesitas:
