@@ -26,7 +26,7 @@ def get_gsheet_data(sheet_name: str) -> pd.DataFrame | None:
             creds, scopes=scopes
         )
         client = gspread.authorize(credentials)
-        sheet = client.open("TRAZABILIDAD").worksheet(sheet_name)
+        sheet = client.open("TEST TRAZABILIDAD").worksheet(sheet_name)
         df = pd.DataFrame(sheet.get_all_records())
         # Normalizar nombres de columnas
         df.columns = df.columns.str.strip().str.upper()
