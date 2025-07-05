@@ -26,8 +26,7 @@ def get_gsheet_data(sheet_name: str) -> pd.DataFrame | None:
         client = gspread.authorize(credentials)
         sheet = client.open("TEST TRAZABILIDAD").worksheet(sheet_name)
         df = pd.DataFrame(sheet.get_all_records())
-        # Normalizar nombres de columnas a mayúsculas sin espacios
-        df.columns = df.columns.str.strip().str.upper()
+        df.columns = df.columns.str.strip().str.upper()  # Normalizar columnas
         return df
     except Exception as e:
         st.error(f"Error al conectar con Google Sheets: {e}")
@@ -40,7 +39,7 @@ df_proceso = get_gsheet_data("PROCESO")
 df_detalle = get_gsheet_data("DETALLE")
 
 # ------------------------------------------------------------------
-# Normalizar columna SERIE y asegurar texto en df_detalle
+# Normalizar columna SERIE en df_detalle
 # ------------------------------------------------------------------
 if df_detalle is not None and "SERIE" in df_detalle.columns:
     df_detalle["SERIE"] = (
@@ -55,34 +54,33 @@ if df_detalle is not None and "SERIE" in df_detalle.columns:
 st.title("FASTRACK")
 st.subheader("CONSULTA DE CILINDROS POR CLIENTE")
 
-# Preparar selector de cliente
 if df_proceso is not None:
     clientes_unicos = df_proceso["CLIENTE"].dropna().unique()
-    cliente_seleccionado = st.selectbox(
-        "Seleccione el cliente:", clientes_unicos
-    )
+    cliente_seleccionado = st.selectbox("Seleccione el cliente:", clientes_unicos)
 else:
     cliente_seleccionado = None
 
 # ------------------------------------------------------------------
-# Botón de búsqueda y procesamiento
+# Botón de búsqueda
 # ------------------------------------------------------------------
 if st.button("Buscar Cilindros del Cliente"):
     if cliente_seleccionado and df_proceso is not None and df_detalle is not None:
-        # Unir procesos con detalles
+        # Merge con todas las columnas necesarias
         df_mov = df_detalle.merge(
             df_proceso[["IDPROC", "FECHA", "HORA", "PROCESO", "CLIENTE", "UBICACION"]],
             on="IDPROC",
             how="left"
         )
 
-        # Normalizar SERIE y asegurarse que sea string
+        # Asegurar columnas necesarias
         df_mov["SERIE"] = df_mov["SERIE"].astype(str).str.replace(",", "", regex=False)
+        df_mov["FECHA"] = df_mov["FECHA"].astype(str)
+        df_mov["HORA"] = df_mov["HORA"].astype(str)
 
         # Filtrar por cliente
         df_cliente = df_mov[df_mov["CLIENTE"] == cliente_seleccionado].copy()
 
-        # Convertir FECHA y HORA en datetime para ordenar correctamente
+        # Crear columna datetime para ordenamiento
         df_cliente["FECHA_HORA"] = pd.to_datetime(
             df_cliente["FECHA"] + " " + df_cliente["HORA"],
             format="%d/%m/%Y %H:%M",
@@ -96,20 +94,19 @@ if st.button("Buscar Cilindros del Cliente"):
             .drop_duplicates(subset="SERIE", keep="first")
         )
 
-        # Filtrar solo los cilindros cuyo último proceso fue DESPACHO o ENTREGA
+        # Filtrar solo procesos de entrega
         df_entregados = df_ultimos[df_ultimos["PROCESO"].isin(["DESPACHO", "ENTREGA"])]
 
-        # Mostrar resultados
         if not df_entregados.empty:
             st.success(f"Cilindros actualmente en el cliente: {cliente_seleccionado}")
 
-            st.dataframe(
-                df_entregados[["SERIE", "IDPROC", "FECHA", "HORA", "PROCESO", "SERVICIO"]]
-            )
+            columnas_mostrar = ["SERIE", "IDPROC", "FECHA", "HORA", "PROCESO", "SERVICIO"]
+            columnas_existentes = [col for col in columnas_mostrar if col in df_entregados.columns]
 
-            # Función auxiliar para descarga
+            st.dataframe(df_entregados[columnas_existentes])
+
             def convert_to_csv(df: pd.DataFrame) -> bytes:
-                return df.to_csv(index=False).encode("utf-8")
+                return df[columnas_existentes].to_csv(index=False).encode("utf-8")
 
             st.download_button(
                 label="⬇️ Descargar resultados en CSV",
