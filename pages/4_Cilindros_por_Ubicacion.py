@@ -23,7 +23,7 @@ def get_gsheet_data(sheet_name):
             scopes=scopes
         )
         client = gspread.authorize(credentials)
-        sheet = client.open("TRAZABILIDAD").worksheet(sheet_name)
+        sheet = client.open("TEST TRAZABILIDAD").worksheet(sheet_name)
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
